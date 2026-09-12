@@ -1,4 +1,4 @@
-﻿import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema, Document } from 'mongoose';
 import bcrypt from 'bcryptjs';
 
 export interface IUser extends Document {
@@ -10,6 +10,7 @@ export interface IUser extends Document {
   address?: string;
   city?: string;
   state?: string;
+  bloodGroup?: string;
   verified: boolean;
   status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
   lastLoginAt?: Date;

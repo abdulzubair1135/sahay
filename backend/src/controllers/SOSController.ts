@@ -1,4 +1,4 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { SOSEvent } from '../models/SOSEvent.js';
 import { SOSRelay } from '../models/SOSRelay.js';
@@ -6,6 +6,7 @@ import { SOSAssignment } from '../models/SOSAssignment.js';
 import { RescueTeam } from '../models/RescueTeam.js';
 import { AuthRequest, logAudit } from '../middleware/auth.js';
 import { broadcastEvent } from '../sockets/socket.js';
+import { sendEmergencyPushNotification } from '../services/firebaseService.js';
 
 export const createSOS = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -49,8 +50,8 @@ export const createSOS = async (req: AuthRequest, res: Response): Promise<void> 
     const sos = await SOSEvent.create({
       eventId: assignedEventId,
       userId: req.user?._id,
-      userName: req.user?.name || req.body.userName,
-      userPhone: req.user?.phone || req.body.userPhone,
+      userName: req.user?.name || req.body.userName || 'Citizen',
+      userPhone: req.user?.phone || req.body.userPhone || '9876543210',
       originDeviceId: assignedDeviceId,
       type: type || 'MEDICAL',
       severity: severity || 'HIGH',
@@ -69,8 +70,17 @@ export const createSOS = async (req: AuthRequest, res: Response): Promise<void> 
       relayPath: []
     });
 
+    broadcastEvent('sos:new', sos);
     broadcastEvent('sos:new', sos, 'gov');
+    broadcastEvent('sos:new', sos, 'admin');
+    broadcastEvent('sos:new', sos, 'ngo');
     broadcastEvent('sos:new', sos, 'rescue');
+    broadcastEvent('sos:alert', sos);
+    sendEmergencyPushNotification(
+      `🚨 EMERGENCY SOS: ${sos.type} Beacon`,
+      `${sos.userName}: ${sos.description || 'Immediate emergency rescue required!'}`,
+      { eventId: sos.eventId, type: sos.type, severity: sos.severity }
+    ).catch(() => {});
     await logAudit(req, 'CREATE_SOS', 'SOSEvent', sos._id.toString(), { eventId: assignedEventId, source: sos.source });
 
     res.status(201).json({

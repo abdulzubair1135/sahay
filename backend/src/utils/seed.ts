@@ -1,4 +1,4 @@
-﻿import mongoose from 'mongoose';
+import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
 import { User } from '../models/User.js';
@@ -8,13 +8,18 @@ import { RescueTeam } from '../models/RescueTeam.js';
 import { NGO } from '../models/NGO.js';
 import { Resource } from '../models/Resource.js';
 import { Alert } from '../models/Alert.js';
+import { Directive } from '../models/Directive.js';
 
 dotenv.config();
 
 const seed = async () => {
-  const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/aapdasetu';
-  await mongoose.connect(uri);
-  console.log('[Seed] Connected to MongoDB');
+  if (mongoose.connection.readyState === 0) {
+    const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/aapdasetu';
+    await mongoose.connect(uri);
+    console.log('[Seed] Connected to MongoDB');
+  } else {
+    console.log('[Seed] Reusing active MongoDB connection');
+  }
 
   const passwordHash = await bcrypt.hash('admin123', 10);
 
@@ -194,11 +199,53 @@ const seed = async () => {
     console.log('[Seed] Created default official preparedness alert');
   }
 
+  // 6. Tactical Directives (Gov -> NGO Supply Mobilization)
+  const dirExists = await Directive.findOne({});
+  if (!dirExists) {
+    await Directive.create({
+      directiveId: 'DIR-88129A',
+      title: 'Deploy 500 Ration Food Kits & 1000L Potable Water',
+      category: 'FOOD_SUPPLY',
+      quantity: 500,
+      unit: 'Packets',
+      targetZone: 'Paldi Relief Camp (Ward 7)',
+      assignedNgoName: 'Red Cross Gujarat',
+      priority: 'HIGH',
+      status: 'PENDING',
+      instructions: 'Urgent distribution required for riverside families relocated due to flood alerts.',
+      issuedAt: new Date()
+    });
+    await Directive.create({
+      directiveId: 'DIR-44912B',
+      title: 'Dispatch 200 Emergency Medical & Trauma Kits',
+      category: 'MEDICAL_KITS',
+      quantity: 200,
+      unit: 'Kits',
+      targetZone: 'Riverfront Emergency Assembly Relief Zone',
+      assignedNgoName: 'Goonj Disaster Relief',
+      priority: 'URGENT',
+      status: 'CRITICAL_STOCK_SHORTAGE',
+      instructions: 'First aid kits for minor injuries and waterborne infection prevention.',
+      stockShortageDetails: {
+        reportedAt: new Date(),
+        missingItems: 'Sterile bandages, antiseptic solution, ORS packets',
+        requestedQuantity: 150,
+        notes: 'Depot stock exhausted. Immediate supply convoy needed from Govt Central Depot.'
+      },
+      issuedAt: new Date(Date.now() - 3600000)
+    });
+    console.log('[Seed] Created default tactical relief directives');
+  }
+
   console.log('[Seed] Database initialization completed successfully.');
-  process.exit(0);
 };
 
-seed().catch((err) => {
-  console.error('[Seed] Error during seeding:', err);
-  process.exit(1);
-});
+export const seedDatabase = seed;
+
+if (process.argv[1] && process.argv[1].includes('seed')) {
+  seed().then(() => process.exit(0)).catch((err) => {
+    console.error('[Seed] Error during seeding:', err);
+    process.exit(1);
+  });
+}
+

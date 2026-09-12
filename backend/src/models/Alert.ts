@@ -1,16 +1,16 @@
-﻿import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IAlert extends Document {
   title: string;
   message: string;
-  type: 'FLOOD' | 'CYCLONE' | 'EARTHQUAKE' | 'FIRE' | 'LANDSLIDE' | 'EXTREME_WEATHER' | 'EVACUATION' | 'GENERAL';
-  severity: 'WARNING' | 'DANGER' | 'SEVERE' | 'EXTREME';
+  type: string;
+  severity: string;
   location?: {
     type: 'Point';
     coordinates: [number, number];
   };
   radiusKm?: number;
-  source: 'GOVERNMENT' | 'NDMA_SACHET' | 'IMD' | 'ADMIN';
+  source: string;
   createdBy?: mongoose.Types.ObjectId;
   expiresAt: Date;
   active: boolean;
@@ -22,13 +22,11 @@ const AlertSchema: Schema = new Schema(
     message: { type: String, required: true },
     type: {
       type: String,
-      enum: ['FLOOD', 'CYCLONE', 'EARTHQUAKE', 'FIRE', 'LANDSLIDE', 'EXTREME_WEATHER', 'EVACUATION', 'GENERAL'],
       default: 'GENERAL',
       index: true
     },
     severity: {
       type: String,
-      enum: ['WARNING', 'DANGER', 'SEVERE', 'EXTREME'],
       default: 'WARNING',
       index: true
     },
@@ -39,7 +37,6 @@ const AlertSchema: Schema = new Schema(
     radiusKm: { type: Number, default: 25 },
     source: {
       type: String,
-      enum: ['GOVERNMENT', 'NDMA_SACHET', 'IMD', 'ADMIN'],
       default: 'GOVERNMENT'
     },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User' },

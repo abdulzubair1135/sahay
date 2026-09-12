@@ -1,4 +1,4 @@
-﻿const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const getHeaders = () => {
   const token = localStorage.getItem('aapdasetu_token');
@@ -144,6 +144,128 @@ export const api = {
 
   getAuditLogs: async () => {
     const res = await fetch(`${API_BASE}/admin/audit-logs`, { headers: getHeaders() });
+    return res.json();
+  },
+
+  // File Upload (Cloudinary / Fallback)
+  uploadImage: async (file: File) => {
+    const formData = new FormData();
+    formData.append('image', file);
+    const token = localStorage.getItem('aapdasetu_token');
+    const res = await fetch(`${API_BASE}/upload`, {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: formData
+    });
+    return res.json();
+  },
+
+  uploadBase64Image: async (base64String: string, folder = 'incidents') => {
+    const res = await fetch(`${API_BASE}/upload/base64`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ image: base64String, folder })
+    });
+    return res.json();
+  },
+
+  // Directives (Gov <-> NGO Supply Orders & Replenishment)
+  getDirectives: async (params?: Record<string, string>) => {
+    const query = new URLSearchParams(params).toString();
+    const res = await fetch(`${API_BASE}/directives?${query}`, { headers: getHeaders() });
+    return res.json();
+  },
+
+  createDirective: async (data: any) => {
+    const res = await fetch(`${API_BASE}/directives`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(data)
+    });
+    return res.json();
+  },
+
+  updateDirectiveStatus: async (id: string, status: string) => {
+    const res = await fetch(`${API_BASE}/directives/${id}/status`, {
+      method: 'PATCH',
+      headers: getHeaders(),
+      body: JSON.stringify({ status })
+    });
+    return res.json();
+  },
+
+  requestStockShortage: async (id: string, data: { missingItems?: string; requestedQuantity?: number; notes?: string }) => {
+    const res = await fetch(`${API_BASE}/directives/${id}/request-stock`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(data)
+    });
+    return res.json();
+  },
+
+  replenishStock: async (id: string, note?: string) => {
+    const res = await fetch(`${API_BASE}/directives/${id}/replenish`, {
+      method: 'PATCH',
+      headers: getHeaders(),
+      body: JSON.stringify({ note })
+    });
+    return res.json();
+  },
+
+  // Auth & OTP
+  sendOtp: async (data: { phone?: string; email?: string; identifier?: string; purpose?: string }) => {
+    const res = await fetch(`${API_BASE}/auth/send-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return res.json();
+  },
+
+  verifyOtp: async (data: any) => {
+    const res = await fetch(`${API_BASE}/auth/verify-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return res.json();
+  },
+
+  registerWithOtp: async (data: any) => {
+    const res = await fetch(`${API_BASE}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return res.json();
+  },
+
+  loginWithPassword: async (data: any) => {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return res.json();
+  },
+
+  requestPasswordReset: async (email: string) => {
+    const res = await fetch(`${API_BASE}/auth/request-password-reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    return res.json();
+  },
+
+  changePasswordWithOtp: async (data: { email: string; otp: string; newPassword: string }) => {
+    const res = await fetch(`${API_BASE}/auth/change-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
     return res.json();
   }
 };

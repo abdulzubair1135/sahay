@@ -1,4 +1,4 @@
-﻿import { Server as SocketIOServer, Socket } from 'socket.io';
+import { Server as SocketIOServer, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User.js';
 
@@ -35,6 +35,7 @@ export const initSocket = (io: SocketIOServer): void => {
 
     if (role === 'GOVERNMENT' || role === 'ADMIN' || role === 'SUPER_ADMIN') {
       socket.join('gov');
+      socket.join('admin');
       socket.join('rescue');
       socket.join('hospital');
       socket.join('ngo');
@@ -49,6 +50,24 @@ export const initSocket = (io: SocketIOServer): void => {
     if (user?._id) {
       socket.join(`user:${user._id.toString()}`);
     }
+
+    socket.on('join_room', (roomName: string) => {
+      if (roomName) {
+        socket.join(roomName);
+        console.log(`[Socket.IO] ${socket.id} joined room: ${roomName}`);
+      }
+    });
+
+    socket.on('chat:send', (msg: any) => {
+      // Broadcast emergency message to all active responders and citizens
+      if (ioInstance) {
+        ioInstance.emit('chat:message', {
+          ...msg,
+          id: msg.id || `msg-${Date.now()}`,
+          timestamp: msg.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+      }
+    });
 
     socket.on('join_device', (deviceId: string) => {
       if (deviceId) {

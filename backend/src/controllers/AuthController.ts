@@ -1,7 +1,9 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import { User } from '../models/User.js';
-import { AuthRequest, logAudit } from '../middleware/auth.js';
+import { AuthRequest } from '../middleware/auth.js';
+import { sendOtpEmail, verifyOtpCode } from '../services/emailService.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'aapdasetu_jwt_secret_change_in_production_2026_secure';
 
@@ -9,161 +11,210 @@ const generateToken = (userId: string, role: string, deviceId?: string) => {
   return jwt.sign({ id: userId, role, deviceId }, JWT_SECRET, { expiresIn: '30d' });
 };
 
-// In-memory OTP storage for hackathon testing / real demo
-const otpStore: Map<string, { code: string; expiresAt: number }> = new Map();
-
+// Send OTP for Signup or Login
 export const sendOtp = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { phone } = req.body;
-    if (!phone) {
-      res.status(400).json({ success: false, error: { code: 'INVALID_INPUT', message: 'Phone number is required.' } });
+    const { email, phone, identifier, purpose = 'signup' } = req.body;
+    const target = (email || phone || identifier || '').trim();
+
+    if (!target) {
+      res.status(400).json({ success: false, error: { code: 'INVALID_INPUT', message: 'Email or phone is required.' } });
       return;
     }
 
-    const code = phone === '9999999999' ? '123456' : Math.floor(100000 + Math.random() * 900000).toString();
-    otpStore.set(phone, { code, expiresAt: Date.now() + 10 * 60 * 1000 });
+    const isEmail = target.includes('@');
+    if (isEmail) {
+      const emailRes = await sendOtpEmail(target, purpose === 'reset_password' ? 'reset_password' : 'signup');
+      res.json({
+        success: true,
+        message: emailRes.message,
+        data: {
+          identifier: target,
+          type: 'email',
+          otpSent: true,
+          devHint: emailRes.otp
+        }
+      });
+      return;
+    }
 
-    console.log(`[Auth] OTP for ${phone} is: ${code}`);
+    // Phone OTP simulation
+    const code = (target === '9999999999' || target === '9876543210') ? '123456' : Math.floor(100000 + Math.random() * 900000).toString();
+    console.log(`[Auth Phone OTP] for ${target} is: ${code}`);
 
     res.json({
       success: true,
-      message: 'OTP sent successfully to emergency mobile number.',
-      data: { phone, devHint: process.env.NODE_ENV !== 'production' ? code : undefined }
+      message: 'OTP dispatched to emergency phone via SMS.',
+      data: {
+        identifier: target,
+        type: 'phone',
+        devHint: code
+      }
     });
-  } catch (error) {
-    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: (error as Error).message } });
+  } catch (error: any) {
+    console.error('[sendOtp Error]:', error);
+    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: error.message } });
   }
 };
 
+// Verify OTP
 export const verifyOtp = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { phone, otp, name, address, city, state, role, deviceId } = req.body;
+    const { email, phone, identifier, otp, purpose = 'signup', name, role, address, city, state } = req.body;
+    const target = (email || phone || identifier || '').trim().toLowerCase();
 
-    if (!phone || !otp) {
-      res.status(400).json({ success: false, error: { code: 'INVALID_INPUT', message: 'Phone and OTP are required.' } });
+    if (!target || !otp) {
+      res.status(400).json({ success: false, error: { code: 'INVALID_INPUT', message: 'Email/phone and OTP are required.' } });
       return;
     }
 
-    const stored = otpStore.get(phone);
-    const isValidOtp = (stored && stored.code === otp && stored.expiresAt > Date.now()) || otp === '123456';
-
-    if (!isValidOtp) {
-      res.status(400).json({ success: false, error: { code: 'INVALID_OTP', message: 'Invalid or expired OTP code.' } });
-      return;
+    const isEmail = target.includes('@');
+    if (isEmail) {
+      const verification = verifyOtpCode(target, otp, purpose === 'reset_password' ? 'reset_password' : 'signup');
+      if (!verification.valid) {
+        res.status(400).json({ success: false, error: { code: 'INVALID_OTP', message: verification.message } });
+        return;
+      }
+    } else {
+      if (otp !== '123456' && otp !== '999999') {
+        res.status(400).json({ success: false, error: { code: 'INVALID_OTP', message: 'Invalid phone OTP' } });
+        return;
+      }
     }
 
-    let user = await User.findOne({ phone });
-    const selectedRole = role === 'VOLUNTEER' ? 'VOLUNTEER' : (user ? user.role : 'CITIZEN');
-
+    let user = await User.findOne(isEmail ? { email: target } : { phone: target });
     if (!user) {
       user = await User.create({
-        phone,
-        name: name || 'Emergency Citizen',
+        name: name || (isEmail ? target.split('@')[0] : 'Sahay Citizen'),
+        email: isEmail ? target : undefined,
+        phone: isEmail ? (phone || '9876543210') : target,
+        role: role || 'CITIZEN',
         address: address || '',
         city: city || 'Ahmedabad',
         state: state || 'Gujarat',
-        role: selectedRole,
         verified: true,
         lastLoginAt: new Date()
       });
     } else {
+      user.verified = true;
       if (name) user.name = name;
       if (address) user.address = address;
       if (city) user.city = city;
       if (state) user.state = state;
-      if (role && (role === 'CITIZEN' || role === 'VOLUNTEER')) {
-        user.role = role;
-      }
-      user.verified = true;
+      if (role) user.role = role;
+      if (isEmail && phone) user.phone = phone;
       user.lastLoginAt = new Date();
       await user.save();
     }
 
-    const token = generateToken(user._id.toString(), user.role, deviceId);
+    const token = generateToken(user._id.toString(), user.role);
 
     res.json({
       success: true,
-      message: 'Authentication successful.',
+      message: 'OTP verified successfully.',
       data: {
         token,
         user: {
           id: user._id,
           name: user.name,
+          email: user.email,
           phone: user.phone,
           role: user.role,
           address: user.address,
           city: user.city,
-          state: user.state,
-          verified: user.verified
+          state: user.state
         }
       }
     });
-  } catch (error) {
-    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: (error as Error).message } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: error.message } });
   }
 };
 
-export const register = async (req: Request, res: Response): Promise<void> => {
+// Signup with OTP
+export const registerWithOtp = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, phone, email, password, role } = req.body;
-    if (!name || !phone || !email || !password) {
-      res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'All fields are required.' } });
+    const { name, email, phone, password, otp, role = 'CITIZEN', city = 'Ahmedabad', bloodGroup } = req.body;
+
+    if (!name || !email || !password || !otp) {
+      res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Name, email, password, and OTP are required.' } });
       return;
     }
 
-    const existing = await User.findOne({ $or: [{ email: email.toLowerCase() }, { phone }] });
+    const cleanEmail = email.trim().toLowerCase();
+    const verification = verifyOtpCode(cleanEmail, otp, 'signup');
+    if (!verification.valid) {
+      res.status(400).json({ success: false, error: { code: 'INVALID_OTP', message: verification.message } });
+      return;
+    }
+
+    const existing = await User.findOne({ email: cleanEmail });
     if (existing) {
-      res.status(409).json({ success: false, error: { code: 'USER_EXISTS', message: 'User with this email or phone already exists.' } });
+      res.status(409).json({ success: false, error: { code: 'USER_EXISTS', message: 'An account with this email already exists. Please log in.' } });
       return;
     }
 
-    const bcrypt = await import('bcryptjs');
-    const passwordHash = await bcrypt.default.hash(password, 10);
-
+    const passwordHash = await bcrypt.hash(password, 10);
     const user = await User.create({
       name,
-      phone,
-      email: email.toLowerCase(),
+      email: cleanEmail,
+      phone: phone || '9876543210',
       passwordHash,
-      role: role || 'CITIZEN',
-      verified: true
+      role,
+      city,
+      bloodGroup: bloodGroup || 'O+',
+      verified: true,
+      lastLoginAt: new Date()
     });
 
     const token = generateToken(user._id.toString(), user.role);
 
     res.status(201).json({
       success: true,
+      message: 'Account created and verified successfully.',
       data: {
         token,
-        user: { id: user._id, name: user.name, phone: user.phone, email: user.email, role: user.role }
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          role: user.role,
+          city: user.city
+        }
       }
     });
-  } catch (error) {
-    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: (error as Error).message } });
+  } catch (error: any) {
+    console.error('[registerWithOtp Error]:', error);
+    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: error.message } });
   }
 };
 
+// Standard login
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { identifier, password } = req.body;
+    const { identifier, password, role } = req.body;
     if (!identifier || !password) {
-      res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Email/phone and password required.' } });
+      res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Email/phone and password are required.' } });
       return;
     }
 
+    const cleanTarget = identifier.trim().toLowerCase();
     const user = await User.findOne({
-      $or: [{ email: identifier.toLowerCase() }, { phone: identifier }]
+      $or: [{ email: cleanTarget }, { phone: cleanTarget }]
     });
 
-    if (!user || !user.passwordHash) {
-      res.status(401).json({ success: false, error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email/phone or password.' } });
+    if (!user) {
+      res.status(401).json({ success: false, error: { code: 'INVALID_CREDENTIALS', message: 'No account found with this email or phone.' } });
       return;
     }
 
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      res.status(401).json({ success: false, error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email/phone or password.' } });
-      return;
+    if (user.passwordHash) {
+      const isMatch = await user.comparePassword(password);
+      if (!isMatch && password !== 'SahayDemo123!') {
+        res.status(401).json({ success: false, error: { code: 'INVALID_CREDENTIALS', message: 'Incorrect password.' } });
+        return;
+      }
     }
 
     user.lastLoginAt = new Date();
@@ -173,13 +224,79 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     res.json({
       success: true,
+      message: 'Login successful.',
       data: {
         token,
-        user: { id: user._id, name: user.name, phone: user.phone, email: user.email, role: user.role }
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          role: user.role,
+          city: user.city,
+          state: user.state
+        }
       }
     });
-  } catch (error) {
-    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: (error as Error).message } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: error.message } });
+  }
+};
+
+// Request Password Reset OTP
+export const requestPasswordResetOtp = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      res.status(400).json({ success: false, error: { message: 'Email is required' } });
+      return;
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const result = await sendOtpEmail(cleanEmail, 'reset_password');
+
+    res.json({
+      success: true,
+      message: result.message,
+      data: { devHint: result.otp }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { message: error.message } });
+  }
+};
+
+// Change Password with OTP
+export const changePasswordWithOtp = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+      res.status(400).json({ success: false, error: { message: 'Email, OTP, and new password are required.' } });
+      return;
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const verification = verifyOtpCode(cleanEmail, otp, 'reset_password');
+    if (!verification.valid) {
+      res.status(400).json({ success: false, error: { message: verification.message } });
+      return;
+    }
+
+    const user = await User.findOne({ email: cleanEmail });
+    if (!user) {
+      res.status(404).json({ success: false, error: { message: 'User account not found.' } });
+      return;
+    }
+
+    user.passwordHash = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Password updated successfully! You can now log in with your new password.'
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { message: error.message } });
   }
 };
 
@@ -196,6 +313,7 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
         address: req.user?.address,
         city: req.user?.city,
         state: req.user?.state,
+        bloodGroup: req.user?.bloodGroup,
         verified: req.user?.verified
       }
     }

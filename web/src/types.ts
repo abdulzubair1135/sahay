@@ -1,4 +1,4 @@
-﻿export interface SOSEvent {
+export interface SOSEvent {
   _id: string;
   eventId: string;
   userId?: string;
@@ -22,6 +22,8 @@
   relayPath: string[];
   assignedTeamId?: any;
   assignedTeamName?: string;
+  verifiedBy?: string;
+  resolvedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -124,7 +126,9 @@ export interface CitizenReport {
     type: 'Point';
     coordinates: [number, number];
   };
+  addressText?: string;
   mediaUrl?: string;
+  images?: string[];
   verificationStatus: 'SUBMITTED' | 'UNDER_REVIEW' | 'VERIFIED' | 'REJECTED' | 'ACTION_TAKEN';
   createdAt: string;
 }

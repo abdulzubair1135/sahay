@@ -1,4 +1,4 @@
-﻿import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema, Document } from 'mongoose';
 
 export interface ICitizenReport extends Document {
   userId?: mongoose.Types.ObjectId;
@@ -10,7 +10,9 @@ export interface ICitizenReport extends Document {
     type: 'Point';
     coordinates: [number, number];
   };
+  images?: string[];
   mediaUrl?: string;
+  addressText?: string;
   verificationStatus: 'SUBMITTED' | 'UNDER_REVIEW' | 'VERIFIED' | 'REJECTED' | 'ACTION_TAKEN';
   verifiedBy?: mongoose.Types.ObjectId;
   verifiedAt?: Date;
@@ -31,6 +33,8 @@ const CitizenReportSchema: Schema = new Schema(
       type: { type: String, enum: ['Point'], default: 'Point' },
       coordinates: { type: [Number], required: true }
     },
+    addressText: { type: String },
+    images: { type: [String], default: [] },
     mediaUrl: { type: String },
     verificationStatus: {
       type: String,

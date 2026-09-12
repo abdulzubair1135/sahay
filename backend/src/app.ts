@@ -1,4 +1,4 @@
-﻿import express, { Request, Response, NextFunction } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -15,14 +15,20 @@ import volunteerRoutes from './routes/volunteers.js';
 import ngoRoutes from './routes/ngos.js';
 import resourceRoutes from './routes/resources.js';
 import adminRoutes from './routes/admin.js';
+import uploadRoutes from './routes/upload.js';
+import directiveRoutes from './routes/directives.js';
+import path from 'path';
 
 const app = express();
 
 app.use(cors({ origin: '*' }));
-app.use(helmet({ contentSecurityPolicy: false }));
+app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(morgan('dev'));
+
+// Static uploads serving
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Health check
 app.get('/api/health', (req: Request, res: Response) => {
@@ -46,6 +52,8 @@ app.use('/api/volunteers', volunteerRoutes);
 app.use('/api/ngos', ngoRoutes);
 app.use('/api/resources', resourceRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/upload', uploadRoutes);
+app.use('/api/directives', directiveRoutes);
 
 // 404 Handler
 app.use((req: Request, res: Response) => {

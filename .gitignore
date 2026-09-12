@@ -37,10 +37,30 @@ Thumbs.db
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
+# Local Scratch Scripts & IDE Temporary
+.vs/
+extracted_ui/
+*.tmp.js
+fix_*.js
+update_*.js
+gen_*.js
+remove_*.js
+scratch_*.js
 
 # Android build outputs
 *.apk
 *.aab
 .gradle/
 captures/
+
+# Secrets & Service Accounts
+serviceAccountKey.json
+**/serviceAccountKey.json
+google-services.json
+**/google-services.json
+firebase-adminsdk*.json
+**/firebase-adminsdk*.json
+**/*.env
+**/*.env*
+*.pem
+*.key
