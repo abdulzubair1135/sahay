@@ -30,7 +30,24 @@ app.use(morgan('dev'));
 // Static uploads serving
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-// Health check
+// Root status & health checks
+app.get('/', (req: Request, res: Response) => {
+  res.json({
+    status: 'online',
+    system: 'Sahay Disaster Command & Emergency Mesh API',
+    tagline: "When the Network Fails, Sahay Doesn't.",
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth',
+      sos: '/api/sos',
+      reports: '/api/reports',
+      alerts: '/api/alerts'
+    }
+  });
+});
+
 app.get('/api/health', (req: Request, res: Response) => {
   res.json({
     status: 'online',
