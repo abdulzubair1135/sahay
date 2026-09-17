@@ -19,7 +19,7 @@ import {
   Building2,
   AlertCircle
 } from 'lucide-react';
-import { SOSEvent, SOSStats, RescueTeam, Shelter, Hospital, CitizenReport } from '../types';
+import { SOSEvent, SOSStats, RescueTeam, Shelter, Hospital, CitizenReport, Alert } from '../types';
 import { api } from '../services/api';
 import { getSocket } from '../services/socket';
 import { LiveMap } from '../components/LiveMap';
@@ -41,6 +41,9 @@ export const GovernmentDashboard: React.FC = () => {
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
   const [reports, setReports] = useState<CitizenReport[]>([]);
   const [directives, setDirectives] = useState<any[]>([]);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [isMarkingZone, setIsMarkingZone] = useState(false);
+  const [previewZone, setPreviewZone] = useState<{ lat: number; lng: number; radiusKm: number } | null>(null);
 
   const [activeSubTab, setActiveSubTab] = useState<'overview' | 'directives'>('overview');
   const [selectedSOS, setSelectedSOS] = useState<SOSEvent | null>(null);
@@ -80,14 +83,15 @@ export const GovernmentDashboard: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [sosRes, statsRes, teamsRes, sheltersRes, hospRes, repRes, dirRes] = await Promise.all([
+      const [sosRes, statsRes, teamsRes, sheltersRes, hospRes, repRes, dirRes, alertsRes] = await Promise.all([
         api.getSOSList(),
         api.getSOSStats(),
         api.getRescueTeams(),
         api.getShelters(),
         api.getHospitals(),
         api.getReports(),
-        api.getDirectives()
+        api.getDirectives(),
+        api.getAlerts()
       ]);
 
       if (sosRes.success) setSosList(sosRes.data || []);
@@ -97,11 +101,24 @@ export const GovernmentDashboard: React.FC = () => {
       if (hospRes.success) setHospitals(hospRes.data || []);
       if (repRes.success) setReports(repRes.data || []);
       if (dirRes.success) setDirectives(dirRes.data || []);
+      if (alertsRes.success) setAlerts(alertsRes.data || []);
     } catch (err) {
       console.error('Failed to load command center data:', err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleMapClick = (lat: number, lng: number) => {
+    setAlertForm((prev) => ({
+      ...prev,
+      latitude: lat,
+      longitude: lng,
+      area: `Ahmedabad Grid Sector (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E)`
+    }));
+    setPreviewZone({ lat, lng, radiusKm: alertForm.radiusKm });
+    setIsMarkingZone(false);
+    setShowAlertModal(true);
   };
 
   useEffect(() => {
@@ -120,11 +137,17 @@ export const GovernmentDashboard: React.FC = () => {
       api.getSOSStats().then((res) => { if (res.success) setStats(res.data); });
     };
 
+    const handleNewAlert = (newAlert: Alert) => {
+      setAlerts((prev) => [newAlert, ...prev.filter((a) => a._id !== newAlert._id)]);
+    };
+
     socket.on('sos:new', handleNewSOS);
     socket.on('sos:status_changed', handleStatusChanged);
     socket.on('sos:assigned', () => loadData());
     socket.on('sos:verified', () => loadData());
     socket.on('directive:updated', () => loadData());
+    socket.on('alert:new', handleNewAlert);
+    socket.on('alert:broadcast', handleNewAlert);
 
     return () => {
       socket.off('sos:new', handleNewSOS);
@@ -132,6 +155,8 @@ export const GovernmentDashboard: React.FC = () => {
       socket.off('sos:assigned');
       socket.off('sos:verified');
       socket.off('directive:updated');
+      socket.off('alert:new', handleNewAlert);
+      socket.off('alert:broadcast', handleNewAlert);
     };
   }, []);
 
@@ -141,6 +166,7 @@ export const GovernmentDashboard: React.FC = () => {
     try {
       await api.createAlert(alertForm);
       setShowAlertModal(false);
+      setPreviewZone(null);
       setAlertForm({
         title: '',
         message: '',
@@ -151,7 +177,6 @@ export const GovernmentDashboard: React.FC = () => {
         latitude: 23.0225,
         longitude: 72.5714
       });
-      alert('Emergency Alert successfully broadcasted to citizens and media!');
       loadData();
     } catch (err) {
       alert('Failed to broadcast alert');
@@ -349,8 +374,27 @@ export const GovernmentDashboard: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-7 flex flex-col h-[620px]">
             <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Live Operational Map</h2>
-              <span className="text-xs text-slate-500">Real GPS coordinates layer</span>
+              <div>
+                <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-red-600" />
+                  Live Operational Map &amp; Danger Zones
+                </h2>
+                <span className="text-[11px] text-slate-500">
+                  {isMarkingZone ? '🎯 Click anywhere on the map to define danger zone' : 'Real GPS coordinates layer'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMarkingZone(!isMarkingZone)}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 shadow-sm ${
+                  isMarkingZone
+                    ? 'bg-amber-500 text-slate-950 ring-2 ring-amber-300 animate-pulse'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <MapPin className="w-3.5 h-3.5 text-red-500" />
+                <span>{isMarkingZone ? '📍 Click Map to Set' : 'Mark Alert on Map'}</span>
+              </button>
             </div>
             <div className="flex-1">
               <LiveMap
@@ -359,6 +403,10 @@ export const GovernmentDashboard: React.FC = () => {
                 shelters={shelters}
                 hospitals={hospitals}
                 reports={reports}
+                alerts={alerts}
+                isMarkingDangerZone={isMarkingZone}
+                onMapClick={handleMapClick}
+                previewDangerZone={previewZone}
                 onSelectSOS={(sos) => setSelectedSOS(sos)}
                 selectedSOS={selectedSOS}
               />

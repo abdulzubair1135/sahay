@@ -10,7 +10,8 @@ import {
   ChevronDown,
   UserCheck,
   LogOut,
-  KeyRound
+  KeyRound,
+  BellRing
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -36,6 +37,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const tabs = [
     { id: 'gov', label: 'Government Command', icon: ShieldAlert, badge: activeSOSCount > 0 ? activeSOSCount : undefined },
+    { id: 'alerts', label: 'Official Alerts', icon: BellRing },
     { id: 'ngo', label: 'NGO Relief Operations', icon: HeartHandshake },
     { id: 'admin', label: 'Admin & Incident Center', icon: Settings },
     { id: 'rescue', label: 'NDRF Rescue Teams', icon: Radio },

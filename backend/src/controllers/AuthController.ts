@@ -15,7 +15,7 @@ const generateToken = (userId: string, role: string, deviceId?: string) => {
 export const sendOtp = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, phone, identifier, purpose = 'signup' } = req.body;
-    const target = (email || phone || identifier || '').trim();
+    const target = (email || identifier || phone || '').trim();
 
     if (!target) {
       res.status(400).json({ success: false, error: { code: 'INVALID_INPUT', message: 'Email or phone is required.' } });
@@ -61,7 +61,7 @@ export const sendOtp = async (req: Request, res: Response): Promise<void> => {
 export const verifyOtp = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, phone, identifier, otp, purpose = 'signup', name, role, address, city, state } = req.body;
-    const target = (email || phone || identifier || '').trim().toLowerCase();
+    const target = (email || identifier || phone || '').trim().toLowerCase();
 
     if (!target || !otp) {
       res.status(400).json({ success: false, error: { code: 'INVALID_INPUT', message: 'Email/phone and OTP are required.' } });

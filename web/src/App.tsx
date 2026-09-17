@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Navbar } from './components/Navbar';
 import { GovernmentDashboard } from './pages/GovernmentDashboard';
+import { OfficialAlertsPage } from './pages/OfficialAlertsPage';
 import { RescueDashboard } from './pages/RescueDashboard';
 import { HospitalDashboard } from './pages/HospitalDashboard';
 import { NGODashboard } from './pages/NGODashboard';
@@ -204,6 +205,7 @@ export const App: React.FC = () => {
 
       <main className="flex-1">
         {currentTab === 'gov' && <GovernmentDashboard />}
+        {currentTab === 'alerts' && <OfficialAlertsPage />}
         {currentTab === 'ngo' && <NGODashboard />}
         {currentTab === 'admin' && <AdminDashboard />}
         {currentTab === 'rescue' && <RescueDashboard />}

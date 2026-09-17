@@ -11,9 +11,12 @@ const otpStore = new Map<string, OtpEntry>();
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: process.env.EMAIL_USER || 'sahay1382@gmail.com',
-    pass: process.env.EMAIL_PASS || 'mnlewwaagoxfnibx'
+    user: process.env.EMAIL_USER || '',
+    pass: process.env.EMAIL_PASS || ''
   },
+  connectionTimeout: 5000,
+  greetingTimeout: 5000,
+  socketTimeout: 5000,
   tls: {
     rejectUnauthorized: false
   }
